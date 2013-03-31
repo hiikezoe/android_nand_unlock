@@ -123,7 +123,7 @@ restore_shlcdc_base_addr(void)
 }
 
 typedef enum {
-  APPSBL_PARTITION   = 7,
+  APPSBL_PARTITION   = 6,
   BOOT_PARTITION     = 8,
   RECOVERY_PARTITION = 9,
   SYSTEM_PARTITION   = 11,
@@ -160,8 +160,8 @@ static struct mmc_protect_inf original_mmc_protect_part[] = {
   { 2,                  MMC_PROTECT_READ | MMC_PROTECT_WRITE },
   { 3,                  MMC_PROTECT_READ | MMC_PROTECT_WRITE },
   { 4,                  MMC_PROTECT_WRITE                    },
-  { 6,                  MMC_PROTECT_READ | MMC_PROTECT_WRITE },
   { APPSBL_PARTITION,   MMC_PROTECT_READ | MMC_PROTECT_WRITE },
+  { 7,                  MMC_PROTECT_READ | MMC_PROTECT_WRITE },
   { BOOT_PARTITION,     MMC_PROTECT_WRITE                    },
   { RECOVERY_PARTITION, MMC_PROTECT_WRITE                    },
   { 10,                 MMC_PROTECT_READ | MMC_PROTECT_WRITE },
