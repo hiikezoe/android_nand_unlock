@@ -123,6 +123,7 @@ restore_shlcdc_base_addr(void)
 }
 
 typedef enum {
+  APPSBL_PARTITION   = 7,
   BOOT_PARTITION     = 8,
   RECOVERY_PARTITION = 9,
   SYSTEM_PARTITION   = 11,
@@ -160,7 +161,7 @@ static struct mmc_protect_inf original_mmc_protect_part[] = {
   { 3,                  MMC_PROTECT_READ | MMC_PROTECT_WRITE },
   { 4,                  MMC_PROTECT_WRITE                    },
   { 6,                  MMC_PROTECT_READ | MMC_PROTECT_WRITE },
-  { 7,                  MMC_PROTECT_READ | MMC_PROTECT_WRITE },
+  { APPSBL_PARTITION,   MMC_PROTECT_READ | MMC_PROTECT_WRITE },
   { BOOT_PARTITION,     MMC_PROTECT_WRITE                    },
   { RECOVERY_PARTITION, MMC_PROTECT_WRITE                    },
   { 10,                 MMC_PROTECT_READ | MMC_PROTECT_WRITE },
@@ -205,6 +206,7 @@ unlock_protection(int32_t mmc_protect_part_index)
   void *mmc_protect_part_address;
   int page_size = sysconf(_SC_PAGE_SIZE);
   int length = page_size * page_size;
+  int index;
 
   fd = open("/dev/shlcdc", O_RDWR);
   if (fd < 0) {
@@ -233,7 +235,9 @@ unlock_protection(int32_t mmc_protect_part_index)
 #endif
 
   mmc_protect_part = mmc_protect_part_address;
-  mmc_protect_part[mmc_protect_part_index].protect = 0;
+  for (index = 0; index < original_mmc_protect_part_size; index++) {
+    mmc_protect_part[index].protect = 0;
+  }
 
   munmap(address, length);
   close(fd);
