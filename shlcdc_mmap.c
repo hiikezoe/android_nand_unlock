@@ -83,7 +83,7 @@ inject_address(unsigned int address)
   injection_data[1].address = target_address + 2;
   injection_data[1].value = (address & 0xffff0000) >> 16;
 
-  return diag_inject(injection_data, 2) == 0;
+  return diag_inject(injection_data, 2);
 }
 
 static bool
