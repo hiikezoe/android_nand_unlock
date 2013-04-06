@@ -137,7 +137,6 @@ shlcdc_mmap(void *address, size_t length, int fd)
   unsigned int *mmap_address = NULL;
   unsigned long sys_setresuid_address;
   int page_size = sysconf(_SC_PAGE_SIZE);
-  int index;
 
   mmap_address = mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
   if (mmap_address == MAP_FAILED) {
