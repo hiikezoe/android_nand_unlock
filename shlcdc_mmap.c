@@ -29,7 +29,6 @@
 #include "libdiagexploit/diag.h"
 
 #define PAGE_SHIFT 12
-#define PAGE_OFFSET 0xC0000000
 #define PHYS_OFFSET 0x40000000
 
 #define MMAP_DEVICE "/dev/shlcdc"
@@ -135,8 +134,6 @@ void *
 shlcdc_mmap(void *address, size_t length, int fd)
 {
   unsigned int *mmap_address = NULL;
-  unsigned long sys_setresuid_address;
-  int page_size = sysconf(_SC_PAGE_SIZE);
 
   mmap_address = mmap(NULL, length, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
   if (mmap_address == MAP_FAILED) {
