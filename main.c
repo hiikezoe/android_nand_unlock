@@ -106,7 +106,7 @@ find_mmc_protect_part(const void *address, int length)
 }
 
 static bool
-unlock_protection(int32_t mmc_protect_part_index)
+unlock_protection(void)
 {
   int fd;
   void *address = NULL;
@@ -157,85 +157,18 @@ restore_protection(void)
   return true;
 }
 
-static void
-usage(void)
-{
-  printf("Usage:\n");
-  printf("\tnand_unlock [partition name]\n");
-}
-
-static partition
-get_partition_number_for_name(const char *name)
-{
-  uint32_t i;
-  for (i = 0; i < partitions_length; i++) {
-    if (!strcmp(name, partitions[i].name)) {
-      return partitions[i].number;
-    }
-  }
-  return -1;
-}
-
-static uint32_t
-get_mmc_protect_part_index_for_name(const char *name)
-{
-  int32_t partition_number;
-  uint32_t mmc_protect_part_index;
-
-  partition_number = get_partition_number_for_name(name);
-  if (partition_number < 0) {
-    return UINT32_MAX;
-  }
-
-  for (mmc_protect_part_index = 0;
-       mmc_protect_part_index < original_mmc_protect_part_size;
-       mmc_protect_part_index++) {
-    if (original_mmc_protect_part[mmc_protect_part_index].partition == (uint32_t)partition_number) {
-      return mmc_protect_part_index;
-    }
-  }
-
-  printf("partition number should be ");
-  for (mmc_protect_part_index = 0;
-       mmc_protect_part_index < original_mmc_protect_part_size;
-       mmc_protect_part_index++) {
-    printf("%u ", original_mmc_protect_part[mmc_protect_part_index].partition);
-  }
-  printf(".\n");
-
-  return UINT32_MAX;
-}
-
 int
 main(int argc, char **argv)
 {
   bool ret;
-  uint32_t mmc_protect_part_index;
 
-  if (argc != 2) {
-    usage();
-    exit(EXIT_FAILURE);
-  }
-
-  if (strcmp("boot", argv[1]) &&
-      strcmp("recovery", argv[1]) &&
-      strcmp("system", argv[1])) {
-    printf("The %s partition is not supported.\n", argv[1]);
-    exit(EXIT_FAILURE);
-  }
-
-  mmc_protect_part_index = get_mmc_protect_part_index_for_name(argv[1]);
-  if (mmc_protect_part_index == UINT32_MAX) {
-    exit(EXIT_FAILURE);
-  }
-
-  ret = unlock_protection(mmc_protect_part_index);
+  ret = unlock_protection();
 
   if (!ret) {
     exit(EXIT_FAILURE);
   }
 
-  printf("Now %s partition is unlocked.\n", argv[1]);
+  printf("Now all partitions have been unlocked.\n");
 
   exit(EXIT_SUCCESS);
 }
