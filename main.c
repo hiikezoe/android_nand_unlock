@@ -26,7 +26,40 @@
 #include <sys/ioctl.h>
 #include <stdbool.h>
 
-#include "shlcdc_mmap.h"
+#define KERNEL_BASE_ADDRESS 0x200000
+#define MAPPED_OFFSET 0x5000000 /* 0x90000000 - 0x8B0000000 */
+#define PHYS_OFFSET 0x80000000
+
+static uint32_t PAGE_OFFSET = (0xC0000000 - KERNEL_BASE_ADDRESS - MAPPED_OFFSET);
+
+static void *
+convert_to_kernel_address(void *address, void *mmap_base_address)
+{
+  return address - mmap_base_address + (void*)PAGE_OFFSET;
+}
+
+static void *
+convert_to_mmaped_address(void *address, void *mmap_base_address)
+{
+  return mmap_base_address + (address - (void*)PAGE_OFFSET);
+}
+
+static void
+dump(void *address, void *base_address)
+{
+  int i;
+  uint32_t *value = (uint32_t*)address;
+
+  for (i = 0; i < 16; i++) {
+    if (i % 4 == 0) {
+      printf("\n%p ", convert_to_kernel_address(value, base_address));
+    }
+    printf("%08x ", *value);
+    value++;
+  }
+  printf("\n");
+  printf("\n");
+}
 
 typedef enum {
   MIBIB_PARTITION    = 2,
@@ -83,22 +116,22 @@ static size_t original_mmc_protect_part_length =
     * sizeof(struct mmc_protect_inf);
 
 static void *
-find_mmc_protect_part(const void *address, int length)
+find_mmc_protect_part(const void *address, uint32_t length)
 {
-  int position;
+  uint32_t position;
   uint32_t mmc_protect_part_index;
 
   for (position = 0; position < length; position++) {
     for (mmc_protect_part_index = 0;
          mmc_protect_part_index < original_mmc_protect_part_size;
          mmc_protect_part_index++) {
-      uint32_t *partition = (uint32_t *)((unsigned long)(address) + position);
+      uint32_t *partition = (uint32_t *)((uint32_t)(address) + position);
       if (partition[mmc_protect_part_index * 2] != original_mmc_protect_part[mmc_protect_part_index].partition) {
         break;
       }
     }
     if (mmc_protect_part_index == original_mmc_protect_part_size) {
-      return (void*)((unsigned long)(address) + position);
+      return (void*)((uint32_t)(address) + position);
     }
   }
 
@@ -111,40 +144,37 @@ unlock_protection(void)
   int fd;
   void *address = NULL;
   void *mmc_protect_part_address;
-  int page_size = sysconf(_SC_PAGE_SIZE);
-  int length = page_size * page_size;
+  void *start_address = (void*)0x10000000;
   int index;
 
-  fd = shlcdc_mmap_device_open();
+  fd = open("/dev/shlcdc", O_RDWR);
   if (fd < 0) {
     return false;
   }
 
-  address = shlcdc_mmap(NULL, length, fd);
+  address = mmap(start_address, PHYS_OFFSET, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_FIXED, fd, 0);
   if (address == MAP_FAILED) {
     close(fd);
     return false;
   }
 
-  mmc_protect_part_address = find_mmc_protect_part(address, length);
+  mmc_protect_part_address = find_mmc_protect_part((void*)PHYS_OFFSET, 0x10000000);
   if (!mmc_protect_part_address) {
     printf("Couldn't find mmc_part_protect address\n");
-    shlcdc_munmap(address, length);
+    munmap(start_address, PHYS_OFFSET);
     close(fd);
     return false;
   }
 
-#ifdef DEBUG
   printf("Found mmc_part_protect at %p\n",
-         (void*)((unsigned long)(mmc_protect_part_address) - (unsigned long)(address) + PAGE_OFFSET));
-#endif
+         convert_to_kernel_address(mmc_protect_part_address, address));
 
   mmc_protect_part = mmc_protect_part_address;
   for (index = 0; index < original_mmc_protect_part_size; index++) {
     mmc_protect_part[index].protect = 0;
   }
 
-  shlcdc_munmap(address, length);
+  munmap(start_address, PHYS_OFFSET);
   close(fd);
 
   return true;
@@ -165,10 +195,12 @@ main(int argc, char **argv)
   ret = unlock_protection();
 
   if (!ret) {
+    kill(getpid(), SIGKILL);
     exit(EXIT_FAILURE);
   }
 
   printf("Now all partitions have been unlocked.\n");
+  kill(getpid(), SIGKILL);
 
   exit(EXIT_SUCCESS);
 }
